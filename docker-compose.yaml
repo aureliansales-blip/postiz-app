@@ -69,6 +69,7 @@ services:
 
       # === Developer Settings
       NX_ADD_PLUGINS: false
+      NOT_SECURED: 'true'
 
     volumes:
       - /Configs/postiz:/config/
