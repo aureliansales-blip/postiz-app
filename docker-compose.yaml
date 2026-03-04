@@ -21,15 +21,6 @@ services:
       UPLOAD_DIRECTORY: '/uploads'
       NEXT_PUBLIC_UPLOAD_DIRECTORY: '/uploads'
 
-      # === Cloudflare (R2) Settings
-      # STORAGE_PROVIDER: 'cloudflare'
-      # CLOUDFLARE_ACCOUNT_ID: 'your-account-id'
-      # CLOUDFLARE_ACCESS_KEY: 'your-access-key'
-      # CLOUDFLARE_SECRET_ACCESS_KEY: 'your-secret-access-key'
-      # CLOUDFLARE_BUCKETNAME: 'your-bucket-name'
-      # CLOUDFLARE_BUCKET_URL: 'https://your-bucket-url.r2.cloudflarestorage.com/'
-      # CLOUDFLARE_REGION: 'auto'
-
       # === Social Media API Settings
       X_API_KEY: ''
       X_API_SECRET: ''
@@ -80,8 +71,8 @@ services:
       NX_ADD_PLUGINS: false
 
     volumes:
-      - /Configs/postiz:/Configs/postiz
-      - /Data/postiz/uploads:/uploads
+      - /Configs/postiz:/config/
+      - /Data/postiz/uploads:/uploads/
     ports:
       - "4007:5000"
     networks:
@@ -125,7 +116,6 @@ services:
     networks:
       - postiz-network
 
-  # For Application Monitoring / Debugging
   spotlight:
     pull_policy: always
     container_name: spotlight
@@ -135,9 +125,6 @@ services:
     networks:
       - postiz-network
 
-  # -----------------------
-  # Temporal Stack
-  # -----------------------
   temporal-elasticsearch:
     container_name: temporal-elasticsearch
     image: elasticsearch:7.17.27
@@ -169,32 +156,12 @@ services:
     volumes:
       - /Data/postiz/temporal-postgres:/var/lib/postgresql/data
 
-  temporal-init:
-    container_name: temporal-init
-    image: busybox
-    restart: "no"
-    command: >
-      sh -c "mkdir -p /dynamicconfig &&
-             echo 'limit.maxIDLength:' > /dynamicconfig/development-sql.yaml &&
-             echo '  - value: 255' >> /dynamicconfig/development-sql.yaml &&
-             echo '    constraints: {}' >> /dynamicconfig/development-sql.yaml &&
-             echo '' >> /dynamicconfig/development-sql.yaml &&
-             echo 'system.forceSearchAttributesCacheRefreshOnRead:' >> /dynamicconfig/development-sql.yaml &&
-             echo '  - value: true' >> /dynamicconfig/development-sql.yaml &&
-             echo '    constraints: {}' >> /dynamicconfig/development-sql.yaml &&
-             echo 'Dynamic config file created successfully'"
-    volumes:
-      - /Data/postiz/temporal-dynamicconfig:/dynamicconfig
-    networks:
-      - temporal-network
-
   temporal:
     container_name: temporal
     ports:
       - '7233:7233'
     image: temporalio/auto-setup:1.28.1
     depends_on:
-      - temporal-init
       - temporal-postgresql
       - temporal-elasticsearch
     environment:
