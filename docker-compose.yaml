@@ -63,23 +63,6 @@ services:
       MASTODON_CLIENT_ID: ''
       MASTODON_CLIENT_SECRET: ''
 
-      # === OAuth & Authentik Settings
-      # NEXT_PUBLIC_POSTIZ_OAUTH_DISPLAY_NAME: 'Authentik'
-      # NEXT_PUBLIC_POSTIZ_OAUTH_LOGO_URL: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/master/png/authentik.png'
-      # POSTIZ_GENERIC_OAUTH: 'false'
-      # POSTIZ_OAUTH_URL: 'https://auth.example.com'
-      # POSTIZ_OAUTH_AUTH_URL: 'https://auth.example.com/application/o/authorize'
-      # POSTIZ_OAUTH_TOKEN_URL: 'https://auth.example.com/application/o/token'
-      # POSTIZ_OAUTH_USERINFO_URL: 'https://authentik.example.com/application/o/userinfo'
-      # POSTIZ_OAUTH_CLIENT_ID: ''
-      # POSTIZ_OAUTH_CLIENT_SECRET: ''
-      # POSTIZ_OAUTH_SCOPE: "openid profile email"  # Optional: uncomment to override default scope
-
-      # === Sentry
-
-      # NEXT_PUBLIC_SENTRY_DSN: 'http://spotlight:8969/stream'
-      # SENTRY_SPOTLIGHT: '1'
-
       # === Misc Settings
       OPENAI_API_KEY: ''
       NEXT_PUBLIC_DISCORD_SUPPORT: ''
@@ -96,21 +79,9 @@ services:
       # === Developer Settings
       NX_ADD_PLUGINS: false
 
-      # === Short Link Service Settings (Optional - leave blank if unused)
-      # DUB_TOKEN: ""
-      # DUB_API_ENDPOINT: "https://api.dub.co"
-      # DUB_SHORT_LINK_DOMAIN: "dub.sh"
-      # SHORT_IO_SECRET_KEY: ""
-      # KUTT_API_KEY: ""
-      # KUTT_API_ENDPOINT: "https://kutt.it/api/v2"
-      # KUTT_SHORT_LINK_DOMAIN: "kutt.it"
-      # LINK_DRIP_API_KEY: ""
-      # LINK_DRIP_API_ENDPOINT: "https://api.linkdrip.com/v1/"
-      # LINK_DRIP_SHORT_LINK_DOMAIN: "dripl.ink"
-
     volumes:
-      - postiz-config:/Configs/postiz
-      - postiz-uploads:/srv/dev-disk-by-uuid-4838d943-653f-4fae-82cf-54286c0dc08b/Cloud/Gary/Business/Nivrium/Social Media/Uploads
+      - /Configs/postiz:/Configs/postiz
+      - /Data/postiz/uploads:/uploads
     ports:
       - "4007:5000"
     networks:
@@ -131,7 +102,7 @@ services:
       POSTGRES_USER: postiz-user
       POSTGRES_DB: postiz-db-local
     volumes:
-      - postgres-volume:/var/lib/postgresql/data
+      - /Data/postiz/postgres:/var/lib/postgresql/data
     networks:
       - postiz-network
     healthcheck:
@@ -139,6 +110,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+
   postiz-redis:
     image: redis:7.2
     container_name: postiz-redis
@@ -149,7 +121,7 @@ services:
       timeout: 3s
       retries: 3
     volumes:
-      - postiz-redis-data:/Data/postiz
+      - /Data/postiz/redis:/data
     networks:
       - postiz-network
 
@@ -182,7 +154,7 @@ services:
     expose:
       - 9200
     volumes:
-      - /var/lib/elasticsearch/data
+      - /Data/postiz/elasticsearch:/usr/share/elasticsearch/data
 
   temporal-postgresql:
     container_name: temporal-postgresql
@@ -195,7 +167,26 @@ services:
     expose:
       - 5432
     volumes:
-      - /var/lib/postgresql/data
+      - /Data/postiz/temporal-postgres:/var/lib/postgresql/data
+
+  temporal-init:
+    container_name: temporal-init
+    image: busybox
+    restart: "no"
+    command: >
+      sh -c "mkdir -p /dynamicconfig &&
+             echo 'limit.maxIDLength:' > /dynamicconfig/development-sql.yaml &&
+             echo '  - value: 255' >> /dynamicconfig/development-sql.yaml &&
+             echo '    constraints: {}' >> /dynamicconfig/development-sql.yaml &&
+             echo '' >> /dynamicconfig/development-sql.yaml &&
+             echo 'system.forceSearchAttributesCacheRefreshOnRead:' >> /dynamicconfig/development-sql.yaml &&
+             echo '  - value: true' >> /dynamicconfig/development-sql.yaml &&
+             echo '    constraints: {}' >> /dynamicconfig/development-sql.yaml &&
+             echo 'Dynamic config file created successfully'"
+    volumes:
+      - /Data/postiz/temporal-dynamicconfig:/dynamicconfig
+    networks:
+      - temporal-network
 
   temporal:
     container_name: temporal
@@ -203,6 +194,7 @@ services:
       - '7233:7233'
     image: temporalio/auto-setup:1.28.1
     depends_on:
+      - temporal-init
       - temporal-postgresql
       - temporal-elasticsearch
     environment:
@@ -211,7 +203,7 @@ services:
       - POSTGRES_USER=temporal
       - POSTGRES_PWD=temporal
       - POSTGRES_SEEDS=temporal-postgresql
-      - DYNAMIC_CONFIG_FILE_PATH=Configs/dynamicconfig/development-sql.yaml
+      - DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/config/dynamicconfig/development-sql.yaml
       - ENABLE_ES=true
       - ES_SEEDS=temporal-elasticsearch
       - ES_VERSION=v7
@@ -219,7 +211,7 @@ services:
     networks:
       - temporal-network
     volumes:
-      - ./dynamicconfig:/etc/temporal/config/dynamicconfig
+      - /Data/postiz/temporal-dynamicconfig:/etc/temporal/config/dynamicconfig
     labels:
       kompose.volume.type: configMap
 
@@ -246,19 +238,6 @@ services:
       - temporal-network
     ports:
       - '8080:8080'
-
-volumes:
-  postgres-volume:
-    external: false
-
-  postiz-redis-data:
-    external: false
-
-  postiz-config:
-    external: false
-
-  postiz-uploads:
-    external: false
 
 networks:
   postiz-network:
